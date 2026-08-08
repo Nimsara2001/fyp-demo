@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import concurrent.futures
+import json
 
 import streamlit as st
 from dotenv import load_dotenv
@@ -46,10 +47,23 @@ def collection_stats(vs) -> tuple[int, int]:
     return len(metadatas), len(docs)
 
 
-def run_both(akshara_pipeline: RagPipeline, baseline_pipeline: RagPipeline, query: str):
+def chunks_for_document(vs, source_document: str) -> int:
+    return len(vs.get(where={"source_document": source_document})["ids"])
+
+
+EXTENSION_BY_SOURCE_FORMAT = {"pdf": ".pdf", "docx": ".docx", "xlsx": ".xlsx"}
+
+
+def run_both(
+    akshara_pipeline: RagPipeline,
+    baseline_pipeline: RagPipeline,
+    query: str,
+    source_document: str,
+):
+    doc_filter = {"source_document": source_document}
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
-        akshara_future = pool.submit(akshara_pipeline.answer, query)
-        baseline_future = pool.submit(baseline_pipeline.answer, query)
+        akshara_future = pool.submit(akshara_pipeline.answer, query, filter=doc_filter)
+        baseline_future = pool.submit(baseline_pipeline.answer, query, filter=doc_filter)
         return akshara_future.result(), baseline_future.result()
 
 
@@ -68,32 +82,54 @@ def render_result(column, title: str, result: PipelineResult):
         )
 
 
-def render_raw_extraction_peek():
-    akshara_files = sorted(config.RAW_TEXT_AKSHARA_DIR.glob("*.txt"))
-    if not akshara_files:
-        st.info("No ingested documents yet — run ingestion first.")
-        return
+def get_document_stems() -> list[str]:
+    meta_files = sorted(config.RAW_TEXT_AKSHARA_DIR.glob("*.meta.json"))
+    return [f.name.removesuffix(".meta.json") for f in meta_files]
 
-    stems = [f.stem for f in akshara_files]
-    with st.expander("Peek at raw extraction (akshara-kit vs. baseline)", expanded=False):
-        selected = st.selectbox("Document", stems, key="peek_stem")
 
-        akshara_text_path = config.RAW_TEXT_AKSHARA_DIR / f"{selected}.txt"
-        baseline_text_path = config.RAW_TEXT_BASELINE_DIR / f"{selected}.txt"
+def load_akshara_meta(stem: str) -> dict:
+    return json.loads((config.RAW_TEXT_AKSHARA_DIR / f"{stem}.meta.json").read_text(encoding="utf-8"))
 
+
+def source_document_name(stem: str, meta: dict) -> str:
+    extension = EXTENSION_BY_SOURCE_FORMAT.get(meta.get("source_format"), "")
+    return f"{stem}{extension}"
+
+
+def render_document_summary(akshara_vs, baseline_vs, meta: dict, source_document: str):
+    """Chunk counts and font-detection evidence for the selected document — no raw chunk dump."""
+    akshara_chunks = chunks_for_document(akshara_vs, source_document)
+    baseline_chunks = chunks_for_document(baseline_vs, source_document)
+
+    quality = meta.get("quality") or {}
+    sinhala_ratio = quality.get("sinhala_ratio")
+    legacy_fonts = meta.get("detected_legacy_fonts") or []
+
+    with st.expander(f"Document summary — {source_document}", expanded=False):
         col_a, col_b = st.columns(2)
         with col_a:
-            st.markdown("**akshara-kit extraction**")
-            st.text(akshara_text_path.read_text(encoding="utf-8") if akshara_text_path.exists() else "(not ingested)")
+            st.markdown("**akshara-kit pipeline**")
+            st.metric("Chunks", akshara_chunks)
+            st.write(f"Backend: `{meta.get('backend_id', 'n/a')}`")
+            st.write(f"Font detection method: `{meta.get('font_detection_method', 'none')}`")
+            st.write("Legacy fonts detected: " + (", ".join(f"`{f}`" for f in legacy_fonts) if legacy_fonts else "none"))
+            st.write(f"OCR used: {meta.get('ocr_used', False)}")
+            st.write(f"Sinhala ratio: {sinhala_ratio:.3f}" if sinhala_ratio is not None else "Sinhala ratio: n/a")
         with col_b:
-            st.markdown("**LangChain baseline extraction**")
-            st.text(baseline_text_path.read_text(encoding="utf-8") if baseline_text_path.exists() else "(not ingested)")
+            st.markdown("**LangChain baseline**")
+            st.metric("Chunks", baseline_chunks)
+            st.write("Font detection: not supported (generic loader)")
 
 
 def main():
     embedder, akshara_vs, baseline_vs = get_app_resources()
 
     st.title("Sinhala RAG: akshara-kit vs. a naive LangChain baseline")
+
+    stems = get_document_stems()
+    if not stems:
+        st.info("No ingested documents yet — run ingestion first.")
+        return
 
     with st.sidebar:
         st.header("Collections")
@@ -103,10 +139,21 @@ def main():
         st.metric("baseline chunks", baseline_chunks, help=f"{baseline_docs} documents")
         k = st.slider("Retrieved chunks (k)", min_value=1, max_value=10, value=config.DEFAULT_RETRIEVAL_K)
 
-    render_raw_extraction_peek()
+        st.header("Document")
+        selected_stem = st.selectbox("Query this document", stems, key="selected_document")
 
-    if "history" not in st.session_state:
+    meta = load_akshara_meta(selected_stem)
+    source_document = source_document_name(selected_stem, meta)
+
+    # A document switch starts a fresh conversation — mixing turns scoped to different
+    # documents in one thread would be confusing, and retrieval for the older turns
+    # would silently stop matching what's now selected.
+    if st.session_state.get("history_document") != source_document:
         st.session_state.history = []
+        st.session_state.history_document = source_document
+
+    render_document_summary(akshara_vs, baseline_vs, meta, source_document)
+    st.caption(f"Chat is scoped to: **{source_document}**")
 
     for query, akshara_result, baseline_result in st.session_state.history:
         st.chat_message("user").write(query)
@@ -114,7 +161,7 @@ def main():
         render_result(col1, "akshara-kit pipeline", akshara_result)
         render_result(col2, "LangChain baseline", baseline_result)
 
-    query = st.chat_input("Ask a question about the ingested documents (Sinhala)")
+    query = st.chat_input(f"Ask a question about {source_document} (Sinhala)")
     if query:
         try:
             llm = get_llm()
@@ -125,7 +172,9 @@ def main():
         akshara_pipeline = RagPipeline(akshara_vs, "akshara-kit", llm, k=k)
         baseline_pipeline = RagPipeline(baseline_vs, "baseline", llm, k=k)
         with st.spinner("Running both pipelines..."):
-            akshara_result, baseline_result = run_both(akshara_pipeline, baseline_pipeline, query)
+            akshara_result, baseline_result = run_both(
+                akshara_pipeline, baseline_pipeline, query, source_document
+            )
         st.session_state.history.append((query, akshara_result, baseline_result))
         st.rerun()
 

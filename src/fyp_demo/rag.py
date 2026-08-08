@@ -48,9 +48,10 @@ class RagPipeline:
         self.k = k
         self._chain = PROMPT | self.llm
 
-    def answer(self, query: str) -> PipelineResult:
+    def answer(self, query: str, *, filter: dict | None = None) -> PipelineResult:
+        """``filter`` scopes retrieval to a metadata match (e.g. one source document)."""
         t0 = time.perf_counter()
-        hits = self.vectorstore.similarity_search_with_relevance_scores(query, k=self.k)
+        hits = self.vectorstore.similarity_search_with_relevance_scores(query, k=self.k, filter=filter)
         retrieval_latency = time.perf_counter() - t0
 
         retrieved = [

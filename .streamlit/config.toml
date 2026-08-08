@@ -1,0 +1,9 @@
+[server]
+# Streamlit's hot-reload file watcher walks every imported module's __path__,
+# including transformers' lazily-imported submodules. Several of those
+# (videomae, vilt, vitmatte, vitpose, zoedepth image processors) import
+# torchvision unconditionally, which isn't installed here (we only need the
+# text encoder), so the watcher's introspection crashes and spams the
+# terminal with tracebacks on every poll. Disabling the watcher stops it;
+# restart the server manually after editing source files.
+fileWatcherType = "none"
