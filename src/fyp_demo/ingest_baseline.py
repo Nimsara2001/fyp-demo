@@ -11,7 +11,7 @@ from langchain_community.document_loaders import Docx2txtLoader, PyPDFLoader
 from langchain_text_splitters import TokenTextSplitter
 
 from fyp_demo import config
-from fyp_demo.embeddings import SinhalaLabseEmbeddings, get_shared_encoder
+from fyp_demo.embeddings import STEmbeddings, get_baseline_encoder
 from fyp_demo.ingest_common import iter_source_files, save_raw_text
 from fyp_demo.vectorstore import get_vectorstore
 
@@ -37,8 +37,8 @@ def ingest_baseline(data_dir: Path = config.DATA_RAW_DIR, *, rebuild: bool = Fal
 
     Returns the total number of chunks added.
     """
-    encoder = get_shared_encoder()
-    embedder = SinhalaLabseEmbeddings(encoder)
+    encoder = get_baseline_encoder()
+    embedder = STEmbeddings(encoder)
     vs = get_vectorstore(config.BASELINE_COLLECTION_NAME, embedder, rebuild=rebuild)
 
     splitter = TokenTextSplitter(

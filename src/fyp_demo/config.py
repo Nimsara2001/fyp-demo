@@ -20,6 +20,14 @@ BASELINE_COLLECTION_NAME = "langchain_baseline"
 
 EMBEDDING_MODEL_NAME = "Nimsara2001/labse-sinhala-finetuned"
 
+# Deliberately different from EMBEDDING_MODEL_NAME: the baseline pipeline uses a
+# generic, non-Sinhala-tuned embedding model instead of sharing akshara-kit's
+# fine-tuned encoder. This means embeddings are now a second variable alongside
+# extraction/chunking — the two pipelines are no longer an apples-to-apples
+# extraction-only comparison. Kept as an explicit, separate constant (not derived
+# from EMBEDDING_MODEL_NAME) so this divergence stays visible in one place.
+BASELINE_EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
+
 OPENAI_MODEL = "gpt-4o-mini"
 
 # Matches akshara-kit's own ChunkConfig.max_words default so the baseline's

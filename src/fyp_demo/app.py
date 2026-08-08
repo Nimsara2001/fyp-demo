@@ -9,7 +9,7 @@ import streamlit as st
 from dotenv import load_dotenv
 
 from fyp_demo import config
-from fyp_demo.embeddings import SinhalaLabseEmbeddings, get_shared_encoder
+from fyp_demo.embeddings import STEmbeddings, get_baseline_encoder, get_shared_encoder
 from fyp_demo.rag import PipelineResult, RagPipeline, build_llm
 from fyp_demo.vectorstore import get_vectorstore
 
@@ -22,16 +22,21 @@ st.set_page_config(page_title="akshara-kit vs. baseline RAG", layout="wide")
 def get_app_resources():
     """Build the expensive shared resources exactly once per server process.
 
+    Each collection must be queried with the same embedding model it was ingested
+    with (akshara-kit: fine-tuned Sinhala LaBSE; baseline: a separate, generic
+    model — see ``config.BASELINE_EMBEDDING_MODEL_NAME``), so this builds two
+    distinct embedders rather than sharing one.
+
     Deliberately excludes the LLM: ``ChatOpenAI`` validates credentials in its
     constructor, so building it here would crash the whole page (sidebar, raw-text
     peek panel, everything) on a missing API key instead of only the chat turn that
     actually needs it.
     """
-    encoder = get_shared_encoder()
-    embedder = SinhalaLabseEmbeddings(encoder)
-    akshara_vs = get_vectorstore(config.AKSHARA_COLLECTION_NAME, embedder)
-    baseline_vs = get_vectorstore(config.BASELINE_COLLECTION_NAME, embedder)
-    return embedder, akshara_vs, baseline_vs
+    akshara_embedder = STEmbeddings(get_shared_encoder())
+    baseline_embedder = STEmbeddings(get_baseline_encoder())
+    akshara_vs = get_vectorstore(config.AKSHARA_COLLECTION_NAME, akshara_embedder)
+    baseline_vs = get_vectorstore(config.BASELINE_COLLECTION_NAME, baseline_embedder)
+    return akshara_vs, baseline_vs
 
 
 @st.cache_resource
@@ -122,7 +127,7 @@ def render_document_summary(akshara_vs, baseline_vs, meta: dict, source_document
 
 
 def main():
-    embedder, akshara_vs, baseline_vs = get_app_resources()
+    akshara_vs, baseline_vs = get_app_resources()
 
     st.title("Sinhala RAG: akshara-kit vs. a naive LangChain baseline")
 

@@ -11,7 +11,7 @@ import logging
 from dotenv import load_dotenv
 
 from fyp_demo import config
-from fyp_demo.embeddings import SinhalaLabseEmbeddings, get_shared_encoder
+from fyp_demo.embeddings import STEmbeddings, get_baseline_encoder, get_shared_encoder
 from fyp_demo.rag import RagPipeline, build_llm
 from fyp_demo.vectorstore import get_vectorstore
 
@@ -22,12 +22,12 @@ def main() -> None:
     load_dotenv()
     logging.basicConfig(level=logging.WARNING)
 
-    encoder = get_shared_encoder()
-    embedder = SinhalaLabseEmbeddings(encoder)
+    akshara_embedder = STEmbeddings(get_shared_encoder())
+    baseline_embedder = STEmbeddings(get_baseline_encoder())
     llm = build_llm()
 
-    akshara_vs = get_vectorstore(config.AKSHARA_COLLECTION_NAME, embedder)
-    baseline_vs = get_vectorstore(config.BASELINE_COLLECTION_NAME, embedder)
+    akshara_vs = get_vectorstore(config.AKSHARA_COLLECTION_NAME, akshara_embedder)
+    baseline_vs = get_vectorstore(config.BASELINE_COLLECTION_NAME, baseline_embedder)
 
     akshara_pipeline = RagPipeline(akshara_vs, "akshara-kit", llm, k=config.DEFAULT_RETRIEVAL_K)
     baseline_pipeline = RagPipeline(baseline_vs, "baseline", llm, k=config.DEFAULT_RETRIEVAL_K)

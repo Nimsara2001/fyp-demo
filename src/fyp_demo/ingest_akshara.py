@@ -16,7 +16,7 @@ from akshara_kit.contracts.chunking import ChunkedDocument, SemanticChunk
 from akshara_kit.contracts.extraction import ExtractionResult
 
 from fyp_demo import config
-from fyp_demo.embeddings import SinhalaLabseEmbeddings, build_shared_labse_scorer, get_shared_encoder
+from fyp_demo.embeddings import STEmbeddings, build_shared_labse_scorer, get_shared_encoder
 from fyp_demo.ingest_common import iter_source_files, save_raw_text
 from fyp_demo.vectorstore import get_vectorstore
 
@@ -61,7 +61,7 @@ def ingest_akshara(data_dir: Path = config.DATA_RAW_DIR, *, rebuild: bool = Fals
     of calling the module-level ``chunk()`` per file. Returns total chunks added.
     """
     encoder = get_shared_encoder()
-    embedder = SinhalaLabseEmbeddings(encoder)
+    embedder = STEmbeddings(encoder)
     scorer = build_shared_labse_scorer(encoder)
     vs = get_vectorstore(config.AKSHARA_COLLECTION_NAME, embedder, rebuild=rebuild)
 
