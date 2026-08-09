@@ -142,7 +142,7 @@ def main():
         baseline_chunks, baseline_docs = collection_stats(baseline_vs)
         st.metric("akshara-kit chunks", akshara_chunks, help=f"{akshara_docs} documents")
         st.metric("baseline chunks", baseline_chunks, help=f"{baseline_docs} documents")
-        k = st.slider("Retrieved chunks (k)", min_value=1, max_value=25, value=config.DEFAULT_RETRIEVAL_K)
+        k = st.slider("Retrieved chunks (k)", min_value=1, max_value=50, value=config.DEFAULT_RETRIEVAL_K)
 
         st.header("Document")
         selected_stem = st.selectbox("Query this document", stems, key="selected_document")
